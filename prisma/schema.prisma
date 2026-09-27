@@ -1,0 +1,764 @@
+// MAYS HR — Data Contract
+// Money fields always use Decimal(12,2). Durations always use Int minutes — never Float/Decimal hours.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Enums ─────────────────────────
+
+enum Role {
+  ADMIN
+  HR_MANAGER
+  HR_EMPLOYEE
+  ACCOUNTANT
+  MANAGER
+  EMPLOYEE
+}
+
+enum EmploymentType {
+  DAILY
+  PART_TIME
+  FULL_TIME
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum DailyPayBasis {
+  HOURLY
+  FIXED_DAILY
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  LEAVE
+  HOLIDAY
+  DAY_OFF
+}
+
+enum PayrollType {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum PayrollStatus {
+  DRAFT
+  CALCULATED
+  REVIEWED
+  APPROVED
+  PAID
+  CLOSED
+  VOID
+}
+
+enum AdvanceStatus {
+  ACTIVE
+  PARTIALLY_SETTLED
+  SETTLED
+  CANCELLED
+}
+
+enum AdvanceTxnType {
+  ISSUE
+  DEDUCTION
+  CANCELLATION
+  ADJUSTMENT
+}
+
+enum DeductionType {
+  ABSENCE
+  LATE
+  SALARY_DEDUCTION
+  ADVANCE_DEDUCTION
+  DAMAGE
+  OTHER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ExpensePaymentStatus {
+  UNPAID
+  INCLUDED_IN_PAYROLL
+  PAID
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  EMERGENCY
+  UNPAID
+  OTHER
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  OTHER
+}
+
+enum RecordStatus {
+  ACTIVE
+  VOID
+}
+
+enum LedgerEntryType {
+  ADVANCE_ISSUED
+  ADVANCE_DEDUCTION
+  SALARY
+  REIMBURSEMENT
+  DEDUCTION
+  BONUS
+  OVERTIME
+  ALLOWANCE
+  PAYMENT
+  ADJUSTMENT
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  VOID
+  PAY
+  LOGIN
+  LOGOUT
+}
+
+enum NotificationType {
+  LEAVE_PENDING
+  ADVANCE_PENDING
+  EXPENSE_PENDING
+  PAYROLL_READY
+  PAYROLL_APPROVED
+  PAYROLL_DUE
+  UNPAID_SALARY
+  OUTSTANDING_ADVANCE
+  UNPAID_REIMBURSEMENT
+  GENERAL
+}
+
+// ───────────────────────── Identity & Access ─────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         Role      @default(EMPLOYEE)
+  employeeId   String?   @unique
+  employee     Employee? @relation(fields: [employeeId], references: [id])
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime? @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+  createdAttendance  AttendanceEntry[] @relation("AttendanceCreatedBy")
+  createdAdvances    Advance[]         @relation("AdvanceCreatedBy")
+  createdDeductions  Deduction[]       @relation("DeductionCreatedBy")
+  approvedDeductions Deduction[]       @relation("DeductionApprovedBy")
+  createdBonuses     Bonus[]           @relation("BonusCreatedBy")
+  approvedBonuses    Bonus[]           @relation("BonusApprovedBy")
+  approvedOvertime   OvertimeEntry[]   @relation("OvertimeApprovedBy")
+  createdExpenses    EmployeeExpense[] @relation("ExpenseCreatedBy")
+  approvedExpenses   EmployeeExpense[] @relation("ExpenseApprovedBy")
+  approvedLeaves     LeaveRequest[]    @relation("LeaveApprovedBy")
+  createdPayments    Payment[]         @relation("PaymentCreatedBy")
+  voidedPayments     Payment[]         @relation("PaymentVoidedBy")
+  createdPeriods     PayrollPeriod[]   @relation("PeriodCreatedBy")
+  approvedPeriods    PayrollPeriod[]   @relation("PeriodApprovedBy")
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ───────────────────────── Org structure ─────────────────────────
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String
+  nameAr      String?
+  description String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  positions Position[]
+  employees Employee[]
+
+  @@map("departments")
+}
+
+model Position {
+  id           String      @id @default(cuid())
+  title        String
+  titleAr      String?
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  description  String?
+  createdAt    DateTime    @default(now()) @db.Timestamptz(3)
+
+  employees Employee[]
+
+  @@map("positions")
+}
+
+// ───────────────────────── Employees ─────────────────────────
+
+model Employee {
+  id             String    @id @default(cuid())
+  employeeNumber String    @unique
+  fullNameAr     String
+  fullNameEn     String
+  phone          String?
+  email          String?
+  nationalId     String?
+  dateOfBirth    DateTime? @db.Date
+  address        String?
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  positionId   String?
+  position     Position?   @relation(fields: [positionId], references: [id])
+  jobTitle     String?
+
+  employmentType    EmploymentType
+  hireDate          DateTime       @db.Date
+  contractStartDate DateTime?      @db.Date
+  contractEndDate   DateTime?      @db.Date
+
+  dailyPayBasis DailyPayBasis @default(HOURLY)
+  basicSalary   Decimal       @default(0) @db.Decimal(12, 2)
+  hourlyRate    Decimal       @default(0) @db.Decimal(12, 2)
+  dailyRate     Decimal       @default(0) @db.Decimal(12, 2)
+  weeklyRate    Decimal       @default(0) @db.Decimal(12, 2)
+  monthlySalary Decimal       @default(0) @db.Decimal(12, 2)
+
+  status EmployeeStatus @default(ACTIVE)
+
+  bankName          String?
+  bankAccountNumber String?
+  bankIban          String?
+
+  emergencyContactName  String?
+  emergencyContactPhone String?
+
+  notes    String?
+  photoUrl String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  user              User?
+  attendanceEntries AttendanceEntry[]
+  leaveRequests     LeaveRequest[]
+  advances          Advance[]
+  deductions        Deduction[]
+  bonuses           Bonus[]
+  allowances        Allowance[]
+  overtimeEntries   OvertimeEntry[]
+  expenses          EmployeeExpense[]
+  payrollRecords    PayrollRecord[]
+  payments          Payment[]
+  ledgerEntries     EmployeeLedgerEntry[]
+  documents         Document[]
+
+  @@index([status])
+  @@index([employmentType])
+  @@map("employees")
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  name       String
+  url        String
+  type       String?
+  uploadedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@map("documents")
+}
+
+// ───────────────────────── Attendance ─────────────────────────
+
+model AttendanceEntry {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  date         DateTime  @db.Date
+  checkIn      DateTime? @db.Timestamptz(3)
+  checkOut     DateTime? @db.Timestamptz(3)
+  breakMinutes Int       @default(0)
+
+  workedMinutes Int @default(0)
+
+  status AttendanceStatus @default(PRESENT)
+  notes  String?
+
+  createdById String?
+  createdBy   User?   @relation("AttendanceCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([employeeId, date])
+  @@map("attendance_entries")
+}
+
+model Holiday {
+  id     String   @id @default(cuid())
+  name   String
+  nameAr String?
+  date   DateTime @db.Date
+  type   String?
+  isPaid Boolean  @default(true)
+  notes  String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([date])
+  @@map("holidays")
+}
+
+model LeaveRequest {
+  id           String      @id @default(cuid())
+  employeeId   String
+  employee     Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType    LeaveType
+  startDate    DateTime    @db.Date
+  endDate      DateTime    @db.Date
+  numberOfDays Decimal     @db.Decimal(6, 2)
+  status       LeaveStatus @default(PENDING)
+  reason       String?
+  notes        String?
+
+  approvedById String?
+  approvedBy   User?     @relation("LeaveApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([employeeId])
+  @@map("leave_requests")
+}
+
+// ───────────────────────── Payroll ─────────────────────────
+
+model PayrollPeriod {
+  id         String        @id @default(cuid())
+  periodType PayrollType
+  startDate  DateTime      @db.Date
+  endDate    DateTime      @db.Date
+  label      String
+  status     PayrollStatus @default(DRAFT)
+
+  createdById  String?
+  createdBy    User?     @relation("PeriodCreatedBy", fields: [createdById], references: [id])
+  approvedById String?
+  approvedBy   User?     @relation("PeriodApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime? @db.Timestamptz(3)
+  paidAt       DateTime? @db.Timestamptz(3)
+
+  notes     String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  records PayrollRecord[]
+
+  @@index([periodType, startDate])
+  @@map("payroll_periods")
+}
+
+model PayrollRecord {
+  id              String        @id @default(cuid())
+  payrollPeriodId String
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        Employee      @relation(fields: [employeeId], references: [id])
+
+  workedMinutes   Int @default(0)
+  regularMinutes  Int @default(0)
+  overtimeMinutes Int @default(0)
+
+  workingDays Int @default(0)
+  absentDays  Int @default(0)
+  leaveDays   Int @default(0)
+
+  basicSalarySnapshot Decimal @default(0) @db.Decimal(12, 2)
+  regularEarnings     Decimal @default(0) @db.Decimal(12, 2)
+  overtimeEarnings    Decimal @default(0) @db.Decimal(12, 2)
+  bonusTotal          Decimal @default(0) @db.Decimal(12, 2)
+  allowanceTotal      Decimal @default(0) @db.Decimal(12, 2)
+  reimbursementTotal  Decimal @default(0) @db.Decimal(12, 2)
+  grossTotal          Decimal @default(0) @db.Decimal(12, 2)
+  advanceDeduction    Decimal @default(0) @db.Decimal(12, 2)
+  deductionTotal      Decimal @default(0) @db.Decimal(12, 2)
+  netPayable          Decimal @default(0) @db.Decimal(12, 2)
+  paidAmount          Decimal @default(0) @db.Decimal(12, 2)
+  remainingAmount     Decimal @default(0) @db.Decimal(12, 2)
+
+  status RecordStatus @default(ACTIVE)
+  notes  String?
+
+  calculatedAt DateTime @default(now()) @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  items               PayrollItem[]
+  payments            Payment[]
+  advanceTransactions AdvanceTransaction[]
+  deductions          Deduction[]
+  bonuses             Bonus[]
+  allowanceLinks      Allowance[]
+  overtimeEntries     OvertimeEntry[]
+  expenses            EmployeeExpense[]
+
+  @@unique([payrollPeriodId, employeeId])
+  @@map("payroll_records")
+}
+
+model PayrollItem {
+  id              String        @id @default(cuid())
+  payrollRecordId String
+  payrollRecord   PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade)
+
+  type      String
+  label     String
+  amount    Decimal  @db.Decimal(12, 2)
+  sourceId  String?
+  notes     String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@map("payroll_items")
+}
+
+// ───────────────────────── Advances ─────────────────────────
+
+model Advance {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  date             DateTime      @db.Date
+  amount           Decimal       @db.Decimal(12, 2)
+  reason           String?
+  paymentMethod    PaymentMethod @default(CASH)
+  deductionMethod  String        @default("INSTALLMENTS")
+  installments     Int           @default(1)
+  remainingBalance Decimal       @db.Decimal(12, 2)
+  status           AdvanceStatus @default(ACTIVE)
+  notes            String?
+
+  createdById String?
+  createdBy   User?    @relation("AdvanceCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  transactions AdvanceTransaction[]
+
+  @@index([employeeId])
+  @@map("advances")
+}
+
+model AdvanceTransaction {
+  id        String  @id @default(cuid())
+  advanceId String
+  advance   Advance @relation(fields: [advanceId], references: [id], onDelete: Cascade)
+
+  date   DateTime       @db.Date
+  amount Decimal        @db.Decimal(12, 2)
+  type   AdvanceTxnType
+
+  payrollRecordId String?
+  payrollRecord   PayrollRecord? @relation(fields: [payrollRecordId], references: [id])
+
+  notes     String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@map("advance_transactions")
+}
+
+// ───────────────────────── Deductions / Bonuses / Allowances / Overtime ─────────────────────────
+
+model Deduction {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  date   DateTime      @db.Date
+  type   DeductionType
+  amount Decimal       @db.Decimal(12, 2)
+  reason String?
+  notes  String?
+
+  status RecordStatus @default(ACTIVE)
+
+  approvedById String?
+  approvedBy   User?   @relation("DeductionApprovedBy", fields: [approvedById], references: [id])
+
+  payrollRecordId String?
+  payrollRecord   PayrollRecord? @relation(fields: [payrollRecordId], references: [id])
+
+  createdById String?
+  createdBy   User?    @relation("DeductionCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([employeeId])
+  @@map("deductions")
+}
+
+model Bonus {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  date   DateTime @db.Date
+  amount Decimal  @db.Decimal(12, 2)
+  type   String   @default("Bonus")
+  reason String?
+  notes  String?
+
+  status RecordStatus @default(ACTIVE)
+
+  approvedById String?
+  approvedBy   User?   @relation("BonusApprovedBy", fields: [approvedById], references: [id])
+
+  payrollRecordId String?
+  payrollRecord   PayrollRecord? @relation(fields: [payrollRecordId], references: [id])
+
+  createdById String?
+  createdBy   User?    @relation("BonusCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([employeeId])
+  @@map("bonuses")
+}
+
+model Allowance {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  type          String
+  amount        Decimal   @db.Decimal(12, 2)
+  recurring     Boolean   @default(true)
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date
+  notes         String?
+
+  payrollRecordId String?
+  payrollRecord   PayrollRecord? @relation(fields: [payrollRecordId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([employeeId])
+  @@map("allowances")
+}
+
+model OvertimeEntry {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  date               DateTime @db.Date
+  normalMinutes      Int      @default(0)
+  overtimeMinutes    Int
+  overtimeRate       Decimal  @db.Decimal(4, 2)
+  hourlyRateSnapshot Decimal  @db.Decimal(12, 2)
+  overtimeAmount     Decimal  @db.Decimal(12, 2)
+
+  approved     Boolean @default(false)
+  approvedById String?
+  approvedBy   User?   @relation("OvertimeApprovedBy", fields: [approvedById], references: [id])
+
+  payrollRecordId String?
+  payrollRecord   PayrollRecord? @relation(fields: [payrollRecordId], references: [id])
+
+  notes     String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([employeeId])
+  @@map("overtime_entries")
+}
+
+// ───────────────────────── Reimbursements ─────────────────────────
+
+model EmployeeExpense {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  date        DateTime @db.Date
+  amount      Decimal  @db.Decimal(12, 2)
+  expenseType String
+  reason      String?
+  description String?
+  paidBy      String?
+  receiptUrl  String?
+
+  approvalStatus   ApprovalStatus       @default(PENDING)
+  paymentStatus    ExpensePaymentStatus @default(UNPAID)
+  includeInPayroll Boolean              @default(true)
+
+  approvedById String?
+  approvedBy   User?     @relation("ExpenseApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime? @db.Timestamptz(3)
+
+  payrollRecordId String?
+  payrollRecord   PayrollRecord? @relation(fields: [payrollRecordId], references: [id])
+
+  notes String?
+
+  createdById String?
+  createdBy   User?    @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([employeeId])
+  @@map("employee_expenses")
+}
+
+// ───────────────────────── Payments & Ledger ─────────────────────────
+
+model Payment {
+  id              String         @id @default(cuid())
+  employeeId      String
+  employee        Employee       @relation(fields: [employeeId], references: [id])
+  payrollRecordId String?
+  payrollRecord   PayrollRecord? @relation(fields: [payrollRecordId], references: [id])
+
+  amount          Decimal       @db.Decimal(12, 2)
+  paymentDate     DateTime      @db.Date
+  paymentMethod   PaymentMethod @default(CASH)
+  referenceNumber String?
+  notes           String?
+
+  status RecordStatus @default(ACTIVE)
+
+  createdById String?
+  createdBy   User?     @relation("PaymentCreatedBy", fields: [createdById], references: [id])
+  voidedById  String?
+  voidedBy    User?     @relation("PaymentVoidedBy", fields: [voidedById], references: [id])
+  voidedAt    DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([employeeId])
+  @@map("payments")
+}
+
+model EmployeeLedgerEntry {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  date         DateTime        @db.Date
+  type         LedgerEntryType
+  description  String
+  debit        Decimal         @default(0) @db.Decimal(12, 2)
+  credit       Decimal         @default(0) @db.Decimal(12, 2)
+  balanceAfter Decimal         @db.Decimal(12, 2)
+
+  sourceType String?
+  sourceId   String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([employeeId, date])
+  @@map("employee_ledger_entries")
+}
+
+// ───────────────────────── System ─────────────────────────
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id])
+  action      AuditAction
+  entityType  String
+  entityId    String?
+  oldValue    Json?
+  newValue    Json?
+  description String?
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id                String           @id @default(cuid())
+  userId            String?
+  user              User?            @relation(fields: [userId], references: [id])
+  targetRole        Role?
+  type              NotificationType
+  title             String
+  message           String
+  isRead            Boolean          @default(false)
+  relatedEntityType String?
+  relatedEntityId   String?
+  createdAt         DateTime         @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model Settings {
+  id                   Int      @id @default(1)
+  companyName          String   @default("MAYS HR")
+  companyNameAr        String   @default("مايس للموارد البشرية")
+  currency             String   @default("JOD")
+  timezone             String   @default("Asia/Amman")
+  defaultLanguage      String   @default("ar")
+  weekStartsOn         Int      @default(6)
+  standardDailyMinutes Int      @default(480)
+  standardMonthlyDays  Int      @default(30)
+  overtimeMultiplier   Decimal  @default(1.5) @db.Decimal(4, 2)
+  lateGraceMinutes     Int      @default(15)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("settings")
+}
