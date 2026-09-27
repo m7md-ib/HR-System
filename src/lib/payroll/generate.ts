@@ -1,4 +1,3 @@
-import "server-only";
 import { db } from "@/lib/db";
 import { addMoney, money, roundMoney, subtractMoney, toPrismaDecimal } from "@/lib/money";
 import { sumDurations } from "@/lib/time/engine";

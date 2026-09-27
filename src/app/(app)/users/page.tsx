@@ -14,7 +14,19 @@ export default async function UsersPage() {
   const { dict } = await getServerDictionary();
 
   const [users, employees] = await Promise.all([
-    db.user.findMany({ include: { employee: true }, orderBy: { createdAt: "asc" } }),
+    db.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        employeeId: true,
+        isActive: true,
+        lastLoginAt: true,
+        employee: { select: { fullNameEn: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
     getEmployeeOptions(),
   ]);
 

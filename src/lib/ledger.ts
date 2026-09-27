@@ -1,4 +1,3 @@
-import "server-only";
 import { db } from "@/lib/db";
 import { addMoney, subtractMoney, toPrismaDecimal, type MoneyInput } from "@/lib/money";
 import type { LedgerEntryType } from "@/generated/prisma/client";

@@ -41,7 +41,7 @@ export default async function AttendancePage({
   const [entries, employees] = await Promise.all([
     db.attendanceEntry.findMany({
       where,
-      include: { employee: true },
+      include: { employee: { select: { fullNameEn: true } } },
       orderBy: [{ date: "desc" }, { checkIn: "asc" }],
     }),
     getEmployeeOptions(),
