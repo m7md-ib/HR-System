@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth/current-user";
 import { getServerDictionary } from "@/i18n/server";
 import { PageHeader } from "@/components/page-header";
 import { updateEmployee } from "@/actions/employees";
+import { serializeEmployee } from "@/lib/serialize";
 import { EmployeeForm } from "../../employee-form";
 
 export default async function EditEmployeePage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,7 +23,7 @@ export default async function EditEmployeePage({ params }: { params: Promise<{ i
   return (
     <div>
       <PageHeader title={dict.employees.edit} description={employee.fullNameEn} />
-      <EmployeeForm action={updateEmployee.bind(null, id)} employee={employee} departments={departments} positions={positions} />
+      <EmployeeForm action={updateEmployee.bind(null, id)} employee={serializeEmployee(employee)} departments={departments} positions={positions} />
     </div>
   );
 }

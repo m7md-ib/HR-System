@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { toDateInputValue } from "@/lib/format";
-import type { Department, Employee, Position } from "@/generated/prisma/client";
+import type { Department, Position } from "@/generated/prisma/client";
+import type { SerializedEmployee } from "@/lib/serialize";
 
 export function EmployeeForm({
   action,
@@ -16,7 +17,7 @@ export function EmployeeForm({
   suggestedEmployeeNumber,
 }: {
   action: (formData: FormData) => void;
-  employee?: Employee;
+  employee?: SerializedEmployee;
   departments: Department[];
   positions: Position[];
   suggestedEmployeeNumber?: string;

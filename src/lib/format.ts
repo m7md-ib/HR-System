@@ -26,6 +26,14 @@ export function formatDateTime(date: Date | string | null | undefined): string {
   return `${formatDate(d)} ${hh}:${mm}`;
 }
 
+/** Formats a Date as HH:MM (local time) for <input type="time"> defaultValue. */
+export function toTimeInputValue(date: Date | string | null | undefined): string {
+  if (!date) return "";
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 export function formatTime(date: Date | string | null | undefined): string {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
