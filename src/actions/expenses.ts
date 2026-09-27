@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/current-user";
 import { logAudit } from "@/lib/audit";
 import { toPrismaDecimal } from "@/lib/money";
 import { appendLedgerEntry } from "@/lib/ledger";
+import { notifyRoles } from "@/lib/notify";
 import { saveUploadedFile, isUploadableFile } from "@/lib/upload";
 
 const schema = z.object({
@@ -57,6 +58,13 @@ export async function createExpense(formData: FormData) {
     },
   });
   await logAudit({ userId: user.id, action: "CREATE", entityType: "EmployeeExpense", entityId: expense.id, newValue: { amount: data.amount } });
+  await notifyRoles(["ADMIN", "HR_MANAGER", "ACCOUNTANT"], {
+    type: "EXPENSE_PENDING",
+    title: "New expense pending approval",
+    message: `A ${data.amount} JOD expense (${data.expenseType}) needs approval.`,
+    relatedEntityType: "EmployeeExpense",
+    relatedEntityId: expense.id,
+  });
   revalidatePath("/expenses");
   revalidatePath(`/employees/${data.employeeId}`);
 }

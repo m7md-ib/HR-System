@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission, requireUser } from "@/lib/auth/current-user";
 import { can } from "@/lib/auth/rbac";
 import { logAudit } from "@/lib/audit";
+import { notifyRoles } from "@/lib/notify";
 
 const LEAVE_TYPES = ["ANNUAL", "SICK", "EMERGENCY", "UNPAID", "OTHER"] as const;
 
@@ -51,6 +52,13 @@ export async function createLeaveRequest(formData: FormData) {
     },
   });
   await logAudit({ userId: user.id, action: "CREATE", entityType: "LeaveRequest", entityId: request.id });
+  await notifyRoles(["ADMIN", "HR_MANAGER"], {
+    type: "LEAVE_PENDING",
+    title: "New leave request",
+    message: `A ${data.leaveType.toLowerCase()} leave request needs approval.`,
+    relatedEntityType: "LeaveRequest",
+    relatedEntityId: request.id,
+  });
   revalidatePath("/leave");
   revalidatePath(`/employees/${data.employeeId}`);
 }

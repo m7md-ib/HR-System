@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/current-user";
 import { logAudit } from "@/lib/audit";
 import { generatePayrollPeriod } from "@/lib/payroll/generate";
+import { notifyRoles } from "@/lib/notify";
 
 const schema = z.object({
   periodType: z.enum(["DAILY", "WEEKLY", "MONTHLY"]),
@@ -40,6 +41,16 @@ export async function generatePayroll(periodId: string) {
   const user = await requirePermission("payroll", "create");
   const result = await generatePayrollPeriod(periodId);
   await logAudit({ userId: user.id, action: "UPDATE", entityType: "PayrollPeriod", entityId: periodId, description: `Generated ${result.created} record(s)` });
+  if (result.created > 0) {
+    const period = await db.payrollPeriod.findUniqueOrThrow({ where: { id: periodId } });
+    await notifyRoles(["ADMIN", "ACCOUNTANT"], {
+      type: "PAYROLL_READY",
+      title: "Payroll ready for review",
+      message: `${period.label}: ${result.created} payroll record(s) generated.`,
+      relatedEntityType: "PayrollPeriod",
+      relatedEntityId: periodId,
+    });
+  }
   revalidatePath("/payroll");
   revalidatePath(`/payroll/${periodId}`);
 }

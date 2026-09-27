@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Pencil, Mail, Phone, Landmark, ShieldAlert } from "lucide-react";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/auth/current-user";
+import { requireUser } from "@/lib/auth/current-user";
 import { can } from "@/lib/auth/rbac";
 import { getServerDictionary } from "@/i18n/server";
 import { PageHeader } from "@/components/page-header";
@@ -16,9 +16,13 @@ import { StatCard } from "@/components/ui/stat-card";
 import { EmployeeProfileTabs } from "./profile-tabs";
 
 export default async function EmployeeProfilePage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requirePermission("employees", "view");
-  const { dict } = await getServerDictionary();
+  const user = await requireUser();
   const { id } = await params;
+  const isOwnProfile = user.employeeId === id;
+  if (!isOwnProfile && !can(user.role, "employees", "view")) {
+    redirect("/forbidden");
+  }
+  const { dict } = await getServerDictionary();
 
   const employee = await db.employee.findUnique({
     where: { id },

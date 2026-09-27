@@ -182,7 +182,6 @@ async function generateRecordForEmployee(period: PayrollPeriod, employee: Employ
       remainingToDeduct = subtractMoney(remainingToDeduct, take);
     }
 
-    return record;
   });
 
   const earningsCredit = roundMoney(addMoney(regularEarnings, overtimeEarnings, bonusTotal, allowanceTotal));
