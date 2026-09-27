@@ -101,10 +101,19 @@ body {
 }
 
 @media print {
-  .no-print {
+  .no-print,
+  aside,
+  header {
     display: none !important;
   }
   body {
     background: white !important;
+  }
+  main {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  .print-full-width {
+    width: 100% !important;
   }
 }
