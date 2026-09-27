@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDate } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
+import { getEmployeeFinancialSummary } from "@/lib/queries/employee-financials";
+import { StatCard } from "@/components/ui/stat-card";
+import { EmployeeProfileTabs } from "./profile-tabs";
 
 export default async function EmployeeProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requirePermission("employees", "view");
@@ -22,6 +25,8 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
     include: { department: true, position: true },
   });
   if (!employee) notFound();
+
+  const summary = await getEmployeeFinancialSummary(id);
 
   const rate =
     employee.employmentType === "FULL_TIME"
@@ -98,6 +103,22 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
         </Card>
       </div>
 
+      <div className="mt-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">{dict.employees.financialSummary.title}</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+          <StatCard label={dict.employees.financialSummary.totalEarnings} value={formatMoney(summary.totalEarnings)} />
+          <StatCard label={dict.employees.financialSummary.totalAdvances} value={formatMoney(summary.totalAdvances)} tone="warning" />
+          <StatCard label={dict.employees.financialSummary.totalDeductions} value={formatMoney(summary.totalDeductions)} tone="danger" />
+          <StatCard label={dict.employees.financialSummary.totalReimbursements} value={formatMoney(summary.totalReimbursements)} />
+          <StatCard label={dict.employees.financialSummary.netPayable} value={formatMoney(summary.netPayable)} tone="primary" />
+          <StatCard label={dict.employees.financialSummary.paid} value={formatMoney(summary.paid)} tone="success" />
+          <StatCard label={dict.employees.financialSummary.remaining} value={formatMoney(summary.remaining)} />
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <EmployeeProfileTabs employeeId={id} />
+      </div>
     </div>
   );
 }
